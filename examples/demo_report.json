@@ -1,0 +1,147 @@
+{
+  "target_path": "examples/buggy_server.py",
+  "files_analyzed": 1,
+  "bug_count": 8,
+  "critical_count": 2,
+  "high_count": 3,
+  "analysis_time_seconds": 14.2,
+  "bugs": [
+    {
+      "title": "SQL Injection in get_user",
+      "description": "User input is directly interpolated into SQL query using f-string, allowing arbitrary SQL execution. An attacker can pass a crafted username to bypass authentication or extract/modify database contents.",
+      "category": "security_vulnerability",
+      "severity": "critical",
+      "confidence": 0.97,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 30,
+        "end_line": 35,
+        "function_name": "get_user"
+      },
+      "code_snippet": "cursor = self.conn.execute(\n    f\"SELECT id, username, email, role FROM users WHERE username = '{username}'\"\n)",
+      "suggestion": "Use parameterized queries: cursor.execute(\"SELECT id, username, email, role FROM users WHERE username = ?\", (username,))",
+      "reasoning": "The f-string directly embeds the username variable into the SQL query string without any sanitization. An attacker can inject SQL by passing username like \"' OR '1'='1' --\" to bypass authentication, or \"' UNION SELECT * FROM users --\" to extract all user data.",
+      "related_locations": []
+    },
+    {
+      "title": "Predictable Session Token Generation",
+      "description": "Session tokens are generated using MD5 hash of user_id, making them trivially predictable. Any attacker who knows a user's ID can compute their session token.",
+      "category": "security_vulnerability",
+      "severity": "critical",
+      "confidence": 0.95,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 82,
+        "end_line": 89,
+        "function_name": "create_session"
+      },
+      "code_snippet": "token = hashlib.md5(str(user_id).encode()).hexdigest()",
+      "suggestion": "Use cryptographically secure random token generation: token = secrets.token_hex(32)",
+      "reasoning": "MD5 hash of a sequential integer user_id is completely deterministic. If user_id=1, the token is always 'c4ca4238a0b923820dcc509a6f75849b'. An attacker can precompute tokens for any user ID and hijack their sessions.",
+      "related_locations": []
+    },
+    {
+      "title": "Logic Error: validate_session checks wrong variable",
+      "description": "validate_session() checks if 'token' is not None instead of checking if 'session' is not None. Since token is always a string argument, this always returns True regardless of whether the session exists.",
+      "category": "logic_error",
+      "severity": "high",
+      "confidence": 0.98,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 92,
+        "end_line": 97,
+        "function_name": "validate_session"
+      },
+      "code_snippet": "session = self.sessions.get(token)\nif token is not None:  # Should be: if session is not None\n    return True",
+      "suggestion": "Change 'if token is not None' to 'if session is not None'",
+      "reasoning": "The variable 'session' is assigned from self.sessions.get(token) but never checked. Instead, 'token' (the function parameter) is checked for None. Since token is a required string parameter, it's never None, so this function always returns True - meaning any arbitrary string is treated as a valid session token.",
+      "related_locations": []
+    },
+    {
+      "title": "Resource Leak in import_users",
+      "description": "File handle is opened but not closed if an exception occurs during processing. The close() call at the end is not reached if create_user() raises an exception.",
+      "category": "resource_leak",
+      "severity": "high",
+      "confidence": 0.92,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 53,
+        "end_line": 63,
+        "function_name": "import_users"
+      },
+      "code_snippet": "f = open(csv_path, \"r\")\ncount = 0\nfor line in f:\n    ...\nf.close()",
+      "suggestion": "Use a context manager: with open(csv_path, 'r') as f:",
+      "reasoning": "If create_user() raises any exception (e.g., database error, constraint violation), the for loop terminates but f.close() is never reached. Over time, this leaks file descriptors which can eventually cause 'Too many open files' errors.",
+      "related_locations": []
+    },
+    {
+      "title": "Weak Password Hashing (MD5 without salt)",
+      "description": "Passwords are hashed with MD5, which is cryptographically broken, and no salt is used. This makes the password database trivially crackable with rainbow tables.",
+      "category": "security_vulnerability",
+      "severity": "high",
+      "confidence": 0.95,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 42,
+        "end_line": 42,
+        "function_name": "create_user"
+      },
+      "code_snippet": "password_hash = hashlib.md5(password.encode()).hexdigest()",
+      "suggestion": "Use bcrypt or argon2: import bcrypt; password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt())",
+      "reasoning": "MD5 is considered cryptographically broken since 2004. Without salting, identical passwords produce identical hashes, enabling rainbow table attacks. Modern GPUs can compute billions of MD5 hashes per second.",
+      "related_locations": []
+    },
+    {
+      "title": "Off-by-One Error in Pagination",
+      "description": "Page 1 starts at offset page_size instead of 0, causing the first page of results to be skipped entirely.",
+      "category": "off_by_one",
+      "severity": "medium",
+      "confidence": 0.90,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 69,
+        "end_line": 69,
+        "function_name": "list_users"
+      },
+      "code_snippet": "offset = page * page_size",
+      "suggestion": "Change to: offset = (page - 1) * page_size",
+      "reasoning": "If page=1 and page_size=10, offset=10, which skips the first 10 users. Page 1 should show users 0-9 (offset=0), but instead shows users 10-19. This means the first page_size users are never visible.",
+      "related_locations": []
+    },
+    {
+      "title": "Division by Zero in calculate_average",
+      "description": "Calling calculate_average([]) raises ZeroDivisionError because len(numbers) is 0.",
+      "category": "boundary_violation",
+      "severity": "medium",
+      "confidence": 0.95,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 117,
+        "end_line": 118,
+        "function_name": "calculate_average"
+      },
+      "code_snippet": "total = sum(numbers)\nreturn total / len(numbers)",
+      "suggestion": "Add empty list check: if not numbers: return 0.0 (or raise ValueError)",
+      "reasoning": "No guard for empty input. sum([]) returns 0, but len([]) is also 0, causing 0/0 = ZeroDivisionError. This is a common boundary case that callers may encounter with filtered/empty datasets.",
+      "related_locations": []
+    },
+    {
+      "title": "Floating Point Comparison for Money",
+      "description": "Using == to compare floating point values for monetary calculations. Due to IEEE 754 representation, 100.0 * 1.1 may not equal exactly 110.0.",
+      "category": "type_confusion",
+      "severity": "medium",
+      "confidence": 0.85,
+      "location": {
+        "file_path": "examples/buggy_server.py",
+        "start_line": 109,
+        "end_line": 109,
+        "function_name": "process_payment"
+      },
+      "code_snippet": "if total == 110.0:",
+      "suggestion": "Use decimal.Decimal for monetary calculations, or use math.isclose() for float comparison",
+      "reasoning": "Floating point arithmetic is inherently imprecise. For example, 0.1 + 0.2 != 0.3 in IEEE 754. Using == for float comparison in financial code can cause the discount to be inconsistently applied, leading to incorrect charges.",
+      "related_locations": []
+    }
+  ],
+  "errors": []
+}
