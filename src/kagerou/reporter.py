@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """Rich terminal and JSON output for Kagerou analysis results."""
 
 from __future__ import annotations

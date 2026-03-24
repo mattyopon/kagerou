@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """Data models for Kagerou bug detection results."""
 
 from __future__ import annotations
